@@ -6,7 +6,7 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
 
-// ✅ EKLEDİĞİMİZ SERVİSİ IMPORT EDİYORUZ
+// SERVİSLER
 import 'services/bildirim_servisi.dart';
 import 'screens/home/home_shell.dart';
 
@@ -20,26 +20,35 @@ Future<void> main() async {
   // 2. Türkçe tarih desteği
   await initializeDateFormatting('tr_TR', null);
 
-  // 3. Saat Dilimi Ayarları
+  // 3. Saat Dilimi Ayarları (GÜNCELLENDİ)
+  // 3. Saat Dilimi Ayarları (GARANTİ YÖNTEM)
   tz.initializeTimeZones();
   try {
+    // getLocalTimezone() sonucunu dynamic alıp toString() ile garantiye alıyoruz
     final dynamic currentTimeZone = await FlutterTimezone.getLocalTimezone();
     final String timeZoneName = currentTimeZone.toString();
     tz.setLocalLocation(tz.getLocation(timeZoneName));
   } catch (e) {
-    debugPrint("Zaman dilimi alınamadı: $e");
-    tz.setLocalLocation(tz.getLocation('Europe/Istanbul'));
+    debugPrint("Zaman dilimi alınamadı, varsayılana dönülüyor: $e");
+    // Hata durumunda Türkiye saati varsayılan yapılır
+    try {
+      tz.setLocalLocation(tz.getLocation('Europe/Istanbul'));
+    } catch (_) {}
   }
 
-  // 4. ✅ BİLDİRİM SERVİSİNİ BAŞLAT (Yeni eklenen satır)
+  // 4. BİLDİRİM SERVİSİNİ BAŞLAT
   await BildirimServisi.baslat();
 
-  // 5. Android 13+ İzin Talebi (Senin kodunda zaten var, korunuyor)
-  await flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin
-      >()
-      ?.requestNotificationsPermission();
+  // 5. Android 13+ İzin Talebi
+  try {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
+  } catch (e) {
+    debugPrint("Bildirim izni alınırken hata: $e");
+  }
 
   runApp(const MyApp());
 }
@@ -98,6 +107,7 @@ class MyApp extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 8),
         ),
 
+        // ✅ HATA GİDERİLDİ: withValues yerine withAlpha kullanıldı
         switchTheme: SwitchThemeData(
           thumbColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
@@ -105,7 +115,7 @@ class MyApp extends StatelessWidget {
                 : Colors.grey,
           ),
           trackColor: WidgetStateProperty.all(
-            const Color(0xFF2E3B8F).withValues(alpha: 0.3),
+            const Color(0xFF2E3B8F).withAlpha(76),
           ),
         ),
 

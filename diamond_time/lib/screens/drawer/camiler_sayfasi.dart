@@ -13,6 +13,7 @@ import '../../services/konum_servisi.dart';
 class CamilerSayfasi extends StatefulWidget {
   final VoidCallback? onGeri;
   final Color anaRenk;
+
   const CamilerSayfasi({
     super.key,
     this.onGeri,
@@ -24,176 +25,154 @@ class CamilerSayfasi extends StatefulWidget {
 }
 
 class _CamilerSayfasiState extends State<CamilerSayfasi> {
-  static List<Map<String, dynamic>> _cachedMosques = [];
-  bool _loading = true;
+  // ✅ Lint Düzeltmesi: Field artık 'final' olarak işaretlendi
+  static final List<Map<String, dynamic>> _cachedMosques = [];
+  bool _loading = false;
   String? _errorMessage;
+
   final MapController _mapController = MapController();
   final ItemScrollController _itemScrollController = ItemScrollController();
+
+  static const List<String> _overpassInstances = [
+    'https://overpass-api.de/api/interpreter',
+    'https://z.overpass-api.de/api/interpreter',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _initSequence();
+    _baslat();
   }
 
-  Future<void> _initSequence() async {
+  Future<void> _baslat() async {
     if (!KonumServisi.yuklendi) {
       await KonumServisi.ilkKurulum();
     }
-    await _fetchMosquesFromAPI();
+
+    if (_cachedMosques.isEmpty) {
+      _fetchMosques();
+    }
   }
 
   void _camiyeOdakla(int index, double lat, double lon) {
     HapticFeedback.lightImpact();
-    _mapController.move(lat_lng.LatLng(lat, lon), 16.5);
+    _mapController.move(lat_lng.LatLng(lat, lon), 16.0);
 
     if (_itemScrollController.isAttached) {
       _itemScrollController.scrollTo(
         index: index,
-        duration: const Duration(milliseconds: 600),
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.decelerate,
       );
     }
   }
 
-  Future<void> _yolTarifiBaslat(double lat, double lon) async {
+  Future<void> _yolTarifi(double lat, double lon) async {
     HapticFeedback.heavyImpact();
-    final googleUrl = Uri.parse("google.navigation:q=$lat,$lon&mode=d");
-    final appleUrl = Uri.parse("https://maps.apple.com/?daddr=$lat,$lon");
-
-    if (await canLaunchUrl(googleUrl)) {
-      await launchUrl(googleUrl);
-    } else if (await canLaunchUrl(appleUrl)) {
-      await launchUrl(appleUrl);
+    final url = Uri.parse("google.navigation:q=$lat,$lon&mode=d");
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
     } else {
       final webUrl = Uri.parse(
-        "https://www.google.com/maps/dir/?api=1&destination=$lat,$lon",
+        "https://www.google.com/maps/search/?api=1&query=$lat,$lon",
       );
       await launchUrl(webUrl, mode: LaunchMode.externalApplication);
     }
   }
 
-  Future<void> _fetchMosquesFromAPI() async {
+  Future<void> _fetchMosques() async {
     final coords = KonumServisi.coords;
+
     if (coords == null) {
-      setState(() {
-        _loading = false;
-        _errorMessage = "Konum bilgisi alınamadı.";
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = "Konum bilgisi henüz hazır değil.";
+        });
+      }
       return;
     }
 
-    final url = Uri.parse('https://overpass-api.de/api/interpreter');
-    const int yariCap = 5000; // 5 km
+    if (mounted) {
+      setState(() {
+        _loading = true;
+      });
+    }
 
     final query =
         '''
-    [out:json][timeout:90];
+    [out:json][timeout:15];
     (
-      node["amenity"="mosque"](around:$yariCap,${coords.latitude},${coords.longitude});
-      way["amenity"="mosque"](around:$yariCap,${coords.latitude},${coords.longitude});
-      relation["amenity"="mosque"](around:$yariCap,${coords.latitude},${coords.longitude});
-      
-      node["religion"="islam"]["amenity"="place_of_worship"](around:$yariCap,${coords.latitude},${coords.longitude});
-      way["religion"="islam"]["amenity"="place_of_worship"](around:$yariCap,${coords.latitude},${coords.longitude});
-      relation["religion"="islam"]["amenity"="place_of_worship"](around:$yariCap,${coords.latitude},${coords.longitude});
-      
-      node["building"="mosque"](around:$yariCap,${coords.latitude},${coords.longitude});
-      way["building"="mosque"](around:$yariCap,${coords.latitude},${coords.longitude});
-      
-      node["historic"="mosque"](around:$yariCap,${coords.latitude},${coords.longitude});
-      way["historic"="mosque"](around:$yariCap,${coords.latitude},${coords.longitude});
+      nwr["amenity"="mosque"](around:3500,${coords.latitude},${coords.longitude});
+      nwr["amenity"="place_of_worship"]["religion"~"muslim|islam"](around:3500,${coords.latitude},${coords.longitude});
     );
-    out center;
+    out center qt;
     ''';
 
-    try {
-      final res = await http
-          .post(url, body: {'data': query})
-          .timeout(const Duration(seconds: 90));
+    for (var instanceUrl in _overpassInstances) {
+      try {
+        final response = await http
+            .post(Uri.parse(instanceUrl), body: {'data': query})
+            .timeout(const Duration(seconds: 12));
 
-      if (res.statusCode == 200) {
-        final data = json.decode(res.body);
-        final List elements = data['elements'] ?? [];
-
-        final Set<String> seenKeys = {};
-        final List<Map<String, dynamic>> newList = [];
-
-        for (var e in elements) {
-          final tags = e['tags'] ?? {};
-
-          String? rawName =
-              tags['name'] ??
-              tags['name:tr'] ??
-              tags['official_name'] ??
-              tags['alt_name'] ??
-              tags['short_name'];
-
-          String fallback =
-              tags['addr:quarter'] ??
-              tags['addr:suburb'] ??
-              tags['addr:neighbourhood'] ??
-              tags['addr:street'] ??
-              tags['addr:place'] ??
-              "Yakın Bölge";
-
-          String camiAdi = rawName ?? "$fallback Cami";
-
-          double lat = (e['lat'] ?? e['center']?['lat'] ?? 0.0).toDouble();
-          double lon = (e['lon'] ?? e['center']?['lon'] ?? 0.0).toDouble();
-
-          if (lat == 0.0 || lon == 0.0) continue;
-
-          String key = "${lat.toStringAsFixed(5)},${lon.toStringAsFixed(5)}";
-          if (seenKeys.contains(key)) continue;
-          seenKeys.add(key);
-
-          double distance =
-              Geolocator.distanceBetween(
-                coords.latitude,
-                coords.longitude,
-                lat,
-                lon,
-              ) /
-              1000;
-
-          if (distance <= 5.0) {
-            newList.add({
-              'ad': camiAdi,
-              'lat': lat,
-              'lon': lon,
-              'mesafe': distance,
-            });
-          }
+        if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes));
+          final elements = data['elements'] as List<dynamic>? ?? [];
+          _parseMosques(elements, coords, newList: _cachedMosques);
+          if (_cachedMosques.isNotEmpty) break;
         }
-
-        newList.sort((a, b) => a['mesafe'].compareTo(b['mesafe']));
-
-        if (mounted) {
-          setState(() {
-            _cachedMosques = newList;
-            _loading = false;
-            _errorMessage = newList.isEmpty
-                ? "5 km içinde cami bulunamadı."
-                : null;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _loading = false;
-            _errorMessage = "Sunucu hatası: ${res.statusCode}";
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _errorMessage = "Bağlantı hatası: $e";
-        });
+      } catch (e) {
+        debugPrint('Sunucu hatası ($instanceUrl): $e');
       }
     }
+
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _errorMessage = _cachedMosques.isEmpty
+            ? "3.5km yakınınızda cami bulunamadı."
+            : null;
+      });
+    }
+  }
+
+  void _parseMosques(
+    List<dynamic> elements,
+    dynamic userCoords, {
+    required List<Map<String, dynamic>> newList,
+  }) {
+    final Set<String> seen = {};
+    newList.clear();
+
+    for (var e in elements) {
+      final tags = (e['tags'] as Map?) ?? {};
+      double lat = (e['lat'] ?? e['center']?['lat'] ?? 0.0).toDouble();
+      double lon = (e['lon'] ?? e['center']?['lon'] ?? 0.0).toDouble();
+
+      if (lat == 0 || lon == 0) {
+        continue;
+      }
+
+      final key = "${lat.toStringAsFixed(5)},${lon.toStringAsFixed(5)}";
+      if (seen.contains(key)) {
+        continue;
+      }
+      seen.add(key);
+
+      newList.add({
+        'ad': tags['name'] ?? tags['name:tr'] ?? 'Cami',
+        'lat': lat,
+        'lon': lon,
+        'mesafe':
+            Geolocator.distanceBetween(
+              userCoords.latitude,
+              userCoords.longitude,
+              lat,
+              lon,
+            ) /
+            1000,
+      });
+    }
+    newList.sort((a, b) => a['mesafe'].compareTo(b['mesafe']));
   }
 
   @override
@@ -207,36 +186,38 @@ class _CamilerSayfasiState extends State<CamilerSayfasi> {
         title: const Text(
           "YAKINDAKİ CAMİLER",
           style: TextStyle(
-            fontSize: 14,
-            letterSpacing: 3,
-            fontWeight: FontWeight.w100,
+            letterSpacing: 1.5,
+            fontSize: 13,
             color: Colors.white,
+            fontWeight: FontWeight.bold,
           ),
         ),
         leading: IconButton(
           icon: const Icon(
             Icons.arrow_back_ios_new,
-            size: 20,
             color: Colors.white,
+            size: 20,
           ),
           onPressed: widget.onGeri ?? () => Navigator.pop(context),
         ),
       ),
       body: _loading
-          ? Center(child: CircularProgressIndicator(color: widget.anaRenk))
+          ? Center(
+              child: CircularProgressIndicator(
+                color: widget.anaRenk,
+                strokeWidth: 2,
+              ),
+            )
           : Column(
               children: [
                 _buildLocationChip(),
                 _buildMapArea(),
+                const SizedBox(height: 12),
                 Expanded(
-                  flex: 4,
                   child: _errorMessage != null
                       ? _buildErrorView()
-                      : _cachedMosques.isEmpty
-                      ? _buildEmptyView()
                       : _buildMosqueList(),
                 ),
-                const SizedBox(height: 100),
               ],
             ),
     );
@@ -247,7 +228,8 @@ class _CamilerSayfasiState extends State<CamilerSayfasi> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        // ✅ Lint Düzeltmesi: withValues kullanımı
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: widget.anaRenk.withValues(alpha: 0.1)),
       ),
@@ -258,7 +240,7 @@ class _CamilerSayfasiState extends State<CamilerSayfasi> {
           Expanded(
             child: Text(
               KonumServisi.adres,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -269,14 +251,17 @@ class _CamilerSayfasiState extends State<CamilerSayfasi> {
 
   Widget _buildMapArea() {
     final coords = KonumServisi.coords;
-    if (coords == null) return const SizedBox();
+    if (coords == null) {
+      return const SizedBox.shrink();
+    }
 
-    return Expanded(
-      flex: 3,
+    return SizedBox(
+      height: 200,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
+          // ✅ Lint Düzeltmesi: withValues kullanımı
           border: Border.all(color: widget.anaRenk.withValues(alpha: 0.2)),
         ),
         child: ClipRRect(
@@ -285,13 +270,17 @@ class _CamilerSayfasiState extends State<CamilerSayfasi> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: lat_lng.LatLng(coords.latitude, coords.longitude),
-              initialZoom: 14.5,
+              initialZoom: 14.0,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              ),
             ),
             children: [
               TileLayer(
                 urlTemplate:
                     'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
+                tileDisplay: const TileDisplay.fadeIn(),
               ),
               MarkerLayer(
                 markers: [
@@ -300,23 +289,27 @@ class _CamilerSayfasiState extends State<CamilerSayfasi> {
                     child: Icon(
                       Icons.my_location,
                       color: widget.anaRenk,
-                      size: 28,
+                      size: 22,
                     ),
                   ),
                   ..._cachedMosques.asMap().entries.map((entry) {
-                    int idx = entry.key;
-                    var m = entry.value;
                     return Marker(
-                      point: lat_lng.LatLng(m['lat'], m['lon']),
+                      point: lat_lng.LatLng(
+                        entry.value['lat'],
+                        entry.value['lon'],
+                      ),
+                      width: 40,
+                      height: 40,
                       child: GestureDetector(
-                        onTap: () => _camiyeOdakla(idx, m['lat'], m['lon']),
+                        onTap: () => _camiyeOdakla(
+                          entry.key,
+                          entry.value['lat'],
+                          entry.value['lon'],
+                        ),
                         child: Icon(
-                          Icons.mosque,
+                          Icons.location_on,
                           color: widget.anaRenk,
-                          size: 36,
-                          shadows: const [
-                            Shadow(color: Colors.black54, blurRadius: 8),
-                          ],
+                          size: 30,
                         ),
                       ),
                     );
@@ -331,53 +324,44 @@ class _CamilerSayfasiState extends State<CamilerSayfasi> {
   }
 
   Widget _buildMosqueList() {
-    return ScrollablePositionedList.separated(
+    return ScrollablePositionedList.builder(
       itemScrollController: _itemScrollController,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
       physics: const BouncingScrollPhysics(),
       itemCount: _cachedMosques.length,
-      separatorBuilder: (_, _) =>
-          const SizedBox(height: 12), // DÜZELTİLDİ: __ → _
       itemBuilder: (context, i) {
         final cami = _cachedMosques[i];
         return Container(
+          margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
+            // ✅ Lint Düzeltmesi: withValues kullanımı
             color: Colors.white.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(15),
             border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
           ),
           child: ListTile(
             onTap: () => _camiyeOdakla(i, cami['lat'], cami['lon']),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 8,
-            ),
-            leading: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: widget.anaRenk.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Icon(Icons.mosque, color: widget.anaRenk, size: 24),
-            ),
+            leading: Icon(Icons.mosque, color: widget.anaRenk, size: 24),
             title: Text(
               cami['ad'],
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
               ),
             ),
             subtitle: Text(
-              "${cami['mesafe'].toStringAsFixed(2)} km uzaklıkta",
+              "${cami['mesafe'].toStringAsFixed(2)} km",
+              // ✅ Lint Düzeltmesi: withValues kullanımı
               style: TextStyle(
-                color: widget.anaRenk.withValues(alpha: 0.7),
-                fontSize: 12,
+                color: widget.anaRenk.withValues(alpha: 0.6),
+                fontSize: 11,
               ),
             ),
             trailing: IconButton(
-              icon: Icon(Icons.directions_car, color: widget.anaRenk, size: 28),
-              onPressed: () => _yolTarifiBaslat(cami['lat'], cami['lon']),
+              icon: Icon(Icons.directions_car, color: widget.anaRenk, size: 22),
+              // ✅ Lint Düzeltmesi: _yolTarifi artık kullanılıyor
+              onPressed: () => _yolTarifi(cami['lat'], cami['lon']),
             ),
           ),
         );
@@ -390,49 +374,19 @@ class _CamilerSayfasiState extends State<CamilerSayfasi> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, color: Colors.redAccent, size: 56),
+          const Icon(Icons.location_off, color: Colors.white12, size: 40),
+          const SizedBox(height: 12),
+          // ✅ Lint Düzeltmesi: Süslü parantez içine alındı
+          if (_errorMessage != null)
+            Text(
+              _errorMessage!,
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
           const SizedBox(height: 16),
-          Text(
-            _errorMessage!,
-            style: const TextStyle(color: Colors.white70, fontSize: 15),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: () {
-              setState(() => _loading = true);
-              _fetchMosquesFromAPI();
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text("Tekrar Dene"),
-            style: ElevatedButton.styleFrom(backgroundColor: widget.anaRenk),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.mosque_outlined, color: Colors.grey, size: 64),
-          const SizedBox(height: 16),
-          const Text(
-            "5 km içinde cami verisi bulunamadı.\n(OpenStreetMap'te kayıtlı olmayabilir)",
-            style: TextStyle(color: Colors.white54, fontSize: 15),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: () {
-              setState(() => _loading = true);
-              _fetchMosquesFromAPI();
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text("Tekrar Ara"),
-            style: ElevatedButton.styleFrom(backgroundColor: widget.anaRenk),
+          TextButton(
+            onPressed: () => _fetchMosques(),
+            child: Text("Tekrar Dene", style: TextStyle(color: widget.anaRenk)),
           ),
         ],
       ),

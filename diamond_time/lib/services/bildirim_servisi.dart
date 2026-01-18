@@ -1,88 +1,175 @@
 import 'dart:typed_data';
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:adhan/adhan.dart';
+import 'package:intl/intl.dart';
+
+// ✅ Arka plan fonksiyonu sınıf dışında en üstte kalmalıdır.
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse notificationResponse) {
+  if (notificationResponse.actionId == 'islem_yap') {
+    final String? payload = notificationResponse.payload;
+    if (payload != null) {
+      final parts = payload.split('_');
+      final String gunKey = parts[0];
+      final String vakit = parts[1];
+      final String tip = parts[2];
+
+      SharedPreferences.getInstance().then((prefs) {
+        if (tip == 'namaz') {
+          prefs.setString('durum_${vakit}_$gunKey', 'Kıldı');
+        } else if (tip == 'oruc') {
+          prefs.setString('durum_${vakit}_$gunKey', 'Tutuldu');
+        }
+      });
+    }
+  }
+}
 
 class BildirimServisi {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
-  // 🔔 Servisi Başlat
   static Future<void> baslat() async {
     tz.initializeTimeZones();
-
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-
     const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings();
-
     const InitializationSettings settings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
     );
 
-    await _plugin.initialize(settings);
+    await _plugin.initialize(
+      settings,
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
+    );
   }
 
-  // ✅ ANA METOD: Tüm vakitleri kurar
-  static Future<void> tumVakitleriSenkronizeEt(PrayerTimes vakitler) async {
-    await tumBildirimleriIptalEt(); // Önce eskileri temizle
+  static Future<void> tumVakitleriSenkronizeEt(
+    Coordinates coords,
+    CalculationParameters params,
+  ) async {
+    await tumBildirimleriIptalEt();
 
     final prefs = await SharedPreferences.getInstance();
-
-    // 0: Sessiz, 1: Sadece Titreşim, 2: Ses + Titreşim (Varsayılan)
     int sesTipi = prefs.getInt('ses_tipi') ?? 2;
     int hatirlatmaDk = prefs.getInt('hatirlatma_dk') ?? 15;
 
-    Map<String, DateTime> vakitMap = {
-      'imsak': vakitler.fajr,
-      'ogle': vakitler.dhuhr,
-      'ikindi': vakitler.asr,
-      'aksam': vakitler.maghrib,
-      'yatsi': vakitler.isha,
-    };
+    for (int i = 0; i < 10; i++) {
+      DateTime hedefGun = DateTime.now().add(Duration(days: i));
+      String gunKey = DateFormat('yyyy-MM-dd').format(hedefGun);
 
-    int idSayac = 0;
-    for (var entry in vakitMap.entries) {
-      String key = entry.key;
-      DateTime zaman = entry.value;
+      PrayerTimes vakitler = PrayerTimes(
+        coords,
+        DateComponents.from(hedefGun),
+        params,
+      );
 
-      bool bildirimAcik = prefs.getBool('${key}_bildirim') ?? true;
+      Map<String, DateTime> vakitMap = {
+        'Sabah': vakitler.fajr,
+        'Öğle': vakitler.dhuhr,
+        'İkindi': vakitler.asr,
+        'Akşam': vakitler.maghrib,
+        'Yatsı': vakitler.isha,
+      };
 
-      if (bildirimAcik) {
-        // 1️⃣ Ana Vakit Bildirimi
-        await _vakitBildirimiKur(
-          idSayac,
-          '${key[0].toUpperCase()}${key.substring(1)}',
-          zaman,
-          sesTipi,
-        );
+      int vakitIndex = 0;
+      for (var entry in vakitMap.entries) {
+        int anaId = (i * 100) + vakitIndex;
+        int hatirlatmaId = (i * 100) + vakitIndex + 50;
+        int onayId = (i * 100) + vakitIndex + 200;
 
-        // 2️⃣ Hatırlatma Bildirimi
-        if (hatirlatmaDk > 0) {
-          DateTime hatirlatmaZamani = zaman.subtract(
-            Duration(minutes: hatirlatmaDk),
-          );
-          await _vakitBildirimiKur(
-            idSayac + 100,
-            '${key[0].toUpperCase()}${key.substring(1)} Yaklaşıyor',
-            hatirlatmaZamani,
-            sesTipi,
-            isHatirlatma: true,
-            dk: hatirlatmaDk,
+        bool bildirimAcik =
+            prefs.getBool('${entry.key.toLowerCase()}_bildirim') ?? true;
+
+        if (bildirimAcik) {
+          await _vakitBildirimiKur(anaId, entry.key, entry.value, sesTipi);
+
+          if (hatirlatmaDk > 0) {
+            DateTime hZaman = entry.value.subtract(
+              Duration(minutes: hatirlatmaDk),
+            );
+            await _vakitBildirimiKur(
+              hatirlatmaId,
+              entry.key,
+              hZaman,
+              sesTipi,
+              isHatirlatma: true,
+              dk: hatirlatmaDk,
+            );
+          }
+
+          // ✅ Vakitten 30 dk sonra interaktif onay bildirimi
+          DateTime onayZamani = entry.value.add(const Duration(minutes: 30));
+          await _interaktifBildirimKur(
+            id: onayId,
+            baslik: 'İbadet Kontrolü 🕌',
+            mesaj: '${entry.key} namazını kıldıysan işaretlemeyi unutma.',
+            zaman: onayZamani,
+            payload: '${gunKey}_${entry.key}_namaz',
+            butonText: 'Kıldım ✅',
           );
         }
+        vakitIndex++;
       }
-      idSayac++;
+
+      // ✅ Oruç Takibi (İftardan 30 dk sonra)
+      await _interaktifBildirimKur(
+        id: (i * 100) + 300,
+        baslik: 'Oruç Kontrolü 🌙',
+        mesaj: 'Bugünkü kaza orucunu tuttuysan işaretleyebilirsin.',
+        zaman: vakitler.maghrib.add(const Duration(minutes: 30)),
+        payload: '${gunKey}_Ramazan Orucu_oruc',
+        butonText: 'Tuttum ✅',
+      );
     }
   }
 
-  // ⏰ İç Metod: Bildirimi Zamanla
+  static Future<void> _interaktifBildirimKur({
+    required int id,
+    required String baslik,
+    required String mesaj,
+    required DateTime zaman,
+    required String payload,
+    required String butonText,
+  }) async {
+    if (zaman.isBefore(DateTime.now())) return;
+
+    await _plugin.zonedSchedule(
+      id,
+      baslik,
+      mesaj,
+      tz.TZDateTime.from(zaman, tz.local),
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          'akilli_takip_kanali',
+          'Akıllı İbadet Takibi',
+          importance: Importance.max,
+          priority: Priority.high,
+          actions: <AndroidNotificationAction>[
+            AndroidNotificationAction(
+              'islem_yap',
+              butonText,
+              showsUserInterface: false,
+            ),
+            const AndroidNotificationAction(
+              'ignore',
+              'Daha Sonra',
+              cancelNotification: true,
+            ),
+          ],
+        ),
+      ),
+      payload: payload,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    );
+  }
+
   static Future<void> _vakitBildirimiKur(
     int id,
     String vakitAdi,
@@ -97,10 +184,6 @@ class BildirimServisi {
         ? '$vakitAdi vaktine $dk dakika kaldı.'
         : '$vakitAdi vakti girdi. Namazını kıldın mı?';
 
-    // ✅ SES + TİTREŞİM MANTIĞI
-    bool playSound = sesTipi == 2;
-    bool enableVibration = sesTipi >= 1;
-
     await _plugin.zonedSchedule(
       id,
       'Diamond Time',
@@ -108,38 +191,27 @@ class BildirimServisi {
       tz.TZDateTime.from(zaman, tz.local),
       NotificationDetails(
         android: AndroidNotificationDetails(
-          'vakit_kanali',
+          'vakit_kanali_v2',
           'Vakit Bildirimleri',
-          channelDescription: 'Sesli ve titreşimli vakit uyarıları',
           importance: Importance.max,
           priority: Priority.high,
-          playSound: playSound,
-          enableVibration: enableVibration,
-          // Zarif ve belirgin bir titreşim deseni: Bekle, Titre, Bekle, Titre
-          vibrationPattern: enableVibration
+          playSound: sesTipi == 2,
+          enableVibration: sesTipi >= 1,
+          vibrationPattern: sesTipi >= 1
               ? Int64List.fromList([0, 500, 200, 500])
               : null,
-        ),
-        iOS: DarwinNotificationDetails(
-          presentSound: playSound,
-          presentAlert: true,
-          presentBadge: true,
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }
 
-  static Future<void> tumBildirimleriIptalEt() async {
-    await _plugin.cancelAll();
-  }
+  static Future<void> tumBildirimleriIptalEt() async =>
+      await _plugin.cancelAll();
 
   static Future<void> pilAyarlariniAc() async {
-    try {
-      if (await Permission.ignoreBatteryOptimizations.request().isGranted) {}
+    if (await Permission.ignoreBatteryOptimizations.request().isGranted) {
       await openAppSettings();
-    } catch (e) {
-      debugPrint("Hata: $e");
     }
   }
 }

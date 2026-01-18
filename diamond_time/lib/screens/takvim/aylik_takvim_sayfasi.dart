@@ -4,8 +4,7 @@ import 'package:adhan/adhan.dart';
 import '../../services/konum_servisi.dart';
 
 class AylikTakvimSayfasi extends StatefulWidget {
-  // ✅ SHELL'den gelen ana rengi buraya alıyoruz
-  final Color anaRenk;
+  final Color anaRenk; // ✅ HomeShell'den gelen dinamik renk
   const AylikTakvimSayfasi({super.key, this.anaRenk = Colors.cyanAccent});
 
   @override
@@ -27,6 +26,7 @@ class _AylikTakvimSayfasiState extends State<AylikTakvimSayfasi> {
 
   Future<void> _verileriHazirla() async {
     DateTime simdi = DateTime.now();
+    // Eğer aynı ay içindeysek ve konum değişmediyse hafızadan getir (Performans)
     if (_takvimHafizasi.isNotEmpty &&
         _kayitliAy == simdi.month &&
         _kayitliAdres == KonumServisi.adres) {
@@ -101,7 +101,6 @@ class _AylikTakvimSayfasiState extends State<AylikTakvimSayfasi> {
                 final vakit = _takvimHafizasi[index];
                 final gun = index + 1;
                 final isBugun = gun == bugun;
-                // ✅ VAKTE GÖRE RENK BURADA KULLANILIYOR
                 return _vakitSatiri(vakit, gun, isBugun);
               },
             ),
@@ -116,13 +115,13 @@ class _AylikTakvimSayfasiState extends State<AylikTakvimSayfasi> {
       padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
       margin: const EdgeInsets.symmetric(horizontal: 15),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: Colors.white.withAlpha(8),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: widget.anaRenk.withValues(alpha: 0.1)),
+        border: Border.all(color: widget.anaRenk.withAlpha(25)),
       ),
       child: Row(
         children: [
-          _HicreHicre("GÜN", renk: widget.anaRenk.withValues(alpha: 0.6)),
+          _HicreHicre("GÜN", renk: widget.anaRenk.withAlpha(150)),
           const _HicreHicre("İMS"),
           const _HicreHicre("GNŞ"),
           const _HicreHicre("ÖĞL"),
@@ -135,7 +134,6 @@ class _AylikTakvimSayfasiState extends State<AylikTakvimSayfasi> {
   }
 
   Widget _vakitSatiri(PrayerTimes v, int gn, bool isBugun) {
-    // ✅ BURASI KRİTİK: Bugünün satırı o anki vaktin rengiyle parlar
     final Color aktifRenk = isBugun ? widget.anaRenk : Colors.white;
 
     return AnimatedContainer(
@@ -144,13 +142,13 @@ class _AylikTakvimSayfasiState extends State<AylikTakvimSayfasi> {
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
         color: isBugun
-            ? widget.anaRenk.withValues(alpha: 0.05)
-            : Colors.white.withValues(alpha: 0.01),
+            ? widget.anaRenk.withAlpha(13)
+            : Colors.white.withAlpha(3),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
           color: isBugun
-              ? widget.anaRenk.withValues(alpha: 0.5)
-              : Colors.white.withValues(alpha: 0.05),
+              ? widget.anaRenk.withAlpha(127)
+              : Colors.white.withAlpha(13),
           width: isBugun ? 1.5 : 1,
         ),
       ),

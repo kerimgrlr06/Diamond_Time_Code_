@@ -102,6 +102,7 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
     final coords = KonumServisi.coords ?? Coordinates(39.9334, 32.8597);
     final params = CalculationMethod.turkey.getParameters();
     params.madhab = Madhab.shafi;
+
     prayerTimes = PrayerTimes(
       coords,
       DateComponents.from(_secilenTarih),
@@ -112,8 +113,10 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
       DateComponents.from(DateTime.now()),
       params,
     );
+
+    // ✅ DÜZELTİLDİ: Bildirim servisine artık PrayerTimes değil, coords ve params gönderiyoruz.
     if (!kIsWeb && bugununVakitleri != null) {
-      BildirimServisi.tumVakitleriSenkronizeEt(bugununVakitleri!);
+      BildirimServisi.tumVakitleriSenkronizeEt(coords, params);
     }
     _zamanHesapla();
   }
@@ -129,9 +132,11 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
     final simdi = DateTime.now();
     final current = bugununVakitleri!.currentPrayer();
     final next = bugununVakitleri!.nextPrayer();
+
     DateTime nextTime = (next == Prayer.none)
         ? bugununVakitleri!.fajr.add(const Duration(days: 1))
         : bugununVakitleri!.timeForPrayer(next)!;
+
     final fark = nextTime.difference(simdi);
     _kalanSureNotifier.value = _formatDuration(fark);
 
@@ -145,10 +150,16 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
     String vakitTr = _vakitIsmiTr(
       current == Prayer.none ? Prayer.isha : current,
     );
+
+    // Performans için sadece vakit değiştiğinde setState yapıyoruz
     if (_sayacVakitIsmi != vakitTr) {
-      setState(() {
-        _sayacVakitIsmi = vakitTr;
-        _temaGuncelle(vakitTr);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _sayacVakitIsmi = vakitTr;
+            _temaGuncelle(vakitTr);
+          });
+        }
       });
     }
   }
@@ -189,10 +200,7 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
             ),
             Text(
               _hicriTarihGetir(),
-              style: TextStyle(
-                fontSize: 11,
-                color: _anaRenk.withValues(alpha: 0.7),
-              ),
+              style: TextStyle(fontSize: 11, color: _anaRenk.withAlpha(180)),
             ),
           ],
         ),
@@ -234,7 +242,7 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
                       : "",
                   style: TextStyle(
                     fontSize: 10,
-                    color: _anaRenk.withValues(alpha: 0.9),
+                    color: _anaRenk.withAlpha(230),
                   ),
                 ),
               ],
@@ -263,36 +271,28 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
   Widget _anaSayacAlani() {
     return Container(
       width: double.infinity,
-      height: 240, // ✅ Taşma yapmayan Diamond yükseklik ayarı
+      height: 240,
       margin: const EdgeInsets.only(top: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: Colors.white.withAlpha(13),
         borderRadius: BorderRadius.circular(40),
-        // ✅ Dış çerçeve silindi, sadece lazer akışı gözükecek
       ),
       child: Center(
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // 🎡 LAZER AKIŞLI KARE ÇERÇEVE
             ValueListenableBuilder<double>(
               valueListenable: _carkIlerlemeNotifier,
               builder: (context, val, child) {
                 return CustomPaint(
-                  size: const Size(
-                    320,
-                    180,
-                  ), // ✅ İçeriye tam sığan lazer boyutu
+                  size: const Size(320, 180),
                   painter: KareIlerlemeBoyaci(ilerleme: val, renk: _anaRenk),
                 );
               },
             ),
-
-            // Metin İçeriği
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize:
-                  MainAxisSize.min, // ✅ İçeriği dikeyde tam merkeze mühürler
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -300,9 +300,9 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: _anaRenk.withValues(alpha: 0.15),
+                    color: _anaRenk.withAlpha(38),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _anaRenk.withValues(alpha: 0.2)),
+                    border: Border.all(color: _anaRenk.withAlpha(50)),
                   ),
                   child: Text(
                     "Şuanki Vakit: $_sayacVakitIsmi",
@@ -321,7 +321,7 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
                     val,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 72, // ✅ Ekranı yormayan ihtişamlı font
+                      fontSize: 72,
                       fontWeight: FontWeight.w100,
                       color: Colors.white,
                       letterSpacing: 2,
@@ -374,7 +374,7 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: _anaRenk.withValues(alpha: 0.2),
+                  color: _anaRenk.withAlpha(50),
                   borderRadius: BorderRadius.circular(15),
                 ),
                 child: Text(
@@ -391,7 +391,7 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
         Container(
           padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.03),
+            color: Colors.white.withAlpha(8),
             borderRadius: BorderRadius.circular(25),
           ),
           child: Row(
@@ -438,16 +438,13 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
                           shape: BoxShape.circle,
                           border: isRealToday
                               ? Border.all(
-                                  color: _anaRenk.withValues(alpha: 0.5),
+                                  color: _anaRenk.withAlpha(127),
                                   width: 1.5,
                                 )
                               : null,
                           gradient: isSelected
                               ? LinearGradient(
-                                  colors: [
-                                    _anaRenk,
-                                    _anaRenk.withValues(alpha: 0.5),
-                                  ],
+                                  colors: [_anaRenk, _anaRenk.withAlpha(127)],
                                 )
                               : null,
                         ),
@@ -504,14 +501,10 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
       decoration: BoxDecoration(
-        color: isSuAn
-            ? r.withValues(alpha: 0.12)
-            : Colors.white.withValues(alpha: 0.02),
+        color: isSuAn ? r.withAlpha(30) : Colors.white.withAlpha(5),
         borderRadius: BorderRadius.circular(25),
         border: Border.all(
-          color: isSuAn
-              ? r.withValues(alpha: 0.8)
-              : Colors.white.withValues(alpha: 0.05),
+          color: isSuAn ? r.withAlpha(200) : Colors.white.withAlpha(13),
           width: isSuAn ? 2 : 1,
         ),
       ),
@@ -553,6 +546,7 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
         Prayer.isha: "Yatsı",
       }[p] ??
       "İmsak";
+
   Color _vakitRengiGetir(String v) =>
       {
         "İmsak": Colors.amber,
@@ -563,6 +557,7 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
         "Yatsı": Colors.indigoAccent,
       }[v] ??
       Colors.blueAccent;
+
   List<Color> _vakitGradientGetir(String vakit) {
     switch (vakit) {
       case "İmsak":
@@ -582,7 +577,6 @@ class _VakitlerSayfasiState extends State<VakitlerSayfasi>
   }
 }
 
-// 🎨 KARE İLERLEME BOYACI (Neon & Laser Effect)
 class KareIlerlemeBoyaci extends CustomPainter {
   final double ilerleme;
   final Color renk;
@@ -591,30 +585,23 @@ class KareIlerlemeBoyaci extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-
-    // 1. Arka plan sabit hat (Sönük)
     final paintBase = Paint()
-      ..color = Colors.white.withValues(alpha: 0.02)
+      ..color = Colors.white.withAlpha(5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-
-    // 2. Neon Glow Efekti
     final paintGlow = Paint()
-      ..color = renk.withValues(alpha: 0.3)
+      ..color = renk.withAlpha(76)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 8
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-
-    // 3. Ana Lazer Çizgisi
     final paintIlerleme = Paint()
-      ..color = renk.withValues(alpha: 0.9)
+      ..color = renk.withAlpha(230)
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeWidth = 4;
 
     RRect rrect = RRect.fromRectAndRadius(rect, const Radius.circular(30));
     canvas.drawRRect(rrect, paintBase);
-
     Path path = Path()..addRRect(rrect);
 
     for (PathMetric pathMetric in path.computeMetrics()) {

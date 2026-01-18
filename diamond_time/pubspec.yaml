@@ -49,6 +49,7 @@ dependencies:
   home_widget: ^0.8.1
   dio: ^5.9.0
   gal: ^2.3.2  # Modern ve hızlı galeri paketi
+  workmanager: ^0.9.0+3
 
 
 dev_dependencies:

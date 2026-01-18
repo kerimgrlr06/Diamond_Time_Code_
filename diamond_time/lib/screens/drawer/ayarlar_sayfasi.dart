@@ -7,13 +7,13 @@ import '../../services/konum_servisi.dart';
 class AyarlarSayfasi extends StatefulWidget {
   final VoidCallback? onGeri;
   final bool geriButonuVarMi;
-  final Color anaRenk; // ✅ Vakte göre değişen dinamik rengi buraya aldık
+  final Color anaRenk;
 
   const AyarlarSayfasi({
     super.key,
     this.onGeri,
     this.geriButonuVarMi = false,
-    this.anaRenk = Colors.blueAccent, // Varsayılan renk
+    this.anaRenk = Colors.blueAccent,
   });
 
   @override
@@ -42,19 +42,21 @@ class _AyarlarSayfasiState extends State<AyarlarSayfasi> {
 
   Future<void> _ayarlariYukle() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      vakitBildirimleri = {
-        'imsak': prefs.getBool('imsak_bildirim') ?? true,
-        'ogle': prefs.getBool('ogle_bildirim') ?? true,
-        'ikindi': prefs.getBool('ikindi_bildirim') ?? true,
-        'aksam': prefs.getBool('aksam_bildirim') ?? true,
-        'yatsi': prefs.getBool('yatsi_bildirim') ?? true,
-      };
-      sesTipi = prefs.getInt('ses_tipi') ?? 2;
-      hatirlatmaDk = prefs.getInt('hatirlatma_dk') ?? 15;
-      uygulamaSesi = prefs.getBool('ses') ?? true;
-      yukleniyor = false;
-    });
+    if (mounted) {
+      setState(() {
+        vakitBildirimleri = {
+          'imsak': prefs.getBool('imsak_bildirim') ?? true,
+          'ogle': prefs.getBool('ogle_bildirim') ?? true,
+          'ikindi': prefs.getBool('ikindi_bildirim') ?? true,
+          'aksam': prefs.getBool('aksam_bildirim') ?? true,
+          'yatsi': prefs.getBool('yatsi_bildirim') ?? true,
+        };
+        sesTipi = prefs.getInt('ses_tipi') ?? 2;
+        hatirlatmaDk = prefs.getInt('hatirlatma_dk') ?? 15;
+        uygulamaSesi = prefs.getBool('ses') ?? true;
+        yukleniyor = false;
+      });
+    }
   }
 
   Future<void> _ayarKaydet(String key, dynamic value) async {
@@ -62,23 +64,23 @@ class _AyarlarSayfasiState extends State<AyarlarSayfasi> {
     if (value is bool) await prefs.setBool(key, value);
     if (value is int) await prefs.setInt(key, value);
 
+    // Ayar değiştiği an bildirimleri 10 günlük yeniden planlıyoruz
     if (KonumServisi.coords != null) {
       final params = CalculationMethod.turkey.getParameters();
       params.madhab = Madhab.shafi;
-      final vakitler = PrayerTimes(
+
+      await BildirimServisi.tumVakitleriSenkronizeEt(
         KonumServisi.coords!,
-        DateComponents.from(DateTime.now()),
         params,
       );
-      await BildirimServisi.tumVakitleriSenkronizeEt(vakitler);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          Colors.transparent, // ✅ Arka plan gradientini kesmesin diye şeffaf
+      // ✅ BEYAZ EKRANI ÇÖZEN KRİTİK SATIR:
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -113,10 +115,8 @@ class _AyarlarSayfasiState extends State<AyarlarSayfasi> {
               children: [
                 _bolumBasligi("VAKİT BİLDİRİMLERİ"),
                 ...vakitBildirimleri.keys.map((vakit) => _vakitSwitch(vakit)),
-
                 const SizedBox(height: 30),
                 _bolumBasligi("SES VE HATIRLATMA"),
-
                 _ayarKarti(
                   icon: Icons.timer_outlined,
                   baslik: "Vakit Öncesi Uyarı",
@@ -142,9 +142,7 @@ class _AyarlarSayfasiState extends State<AyarlarSayfasi> {
                     },
                   ),
                 ),
-
                 const SizedBox(height: 15),
-
                 _ayarKarti(
                   icon: Icons.music_note_outlined,
                   baslik: "Bildirim Modu",
@@ -168,16 +166,14 @@ class _AyarlarSayfasiState extends State<AyarlarSayfasi> {
                     },
                   ),
                 ),
-
                 const SizedBox(height: 15),
-
                 _ayarKarti(
                   icon: Icons.volume_up_outlined,
                   baslik: "Uygulama Sesleri",
                   altBaslik: "Efekt ve buton sesleri",
                   kontroller: Switch(
                     activeThumbColor: widget.anaRenk,
-                    activeTrackColor: widget.anaRenk.withValues(alpha: 0.3),
+                    activeTrackColor: widget.anaRenk.withAlpha(80),
                     value: uygulamaSesi,
                     onChanged: (v) {
                       setState(() => uygulamaSesi = v);
@@ -185,7 +181,6 @@ class _AyarlarSayfasiState extends State<AyarlarSayfasi> {
                     },
                   ),
                 ),
-
                 const SizedBox(height: 30),
                 _bolumBasligi("HAKKINDA"),
                 _ayarKarti(
@@ -198,8 +193,6 @@ class _AyarlarSayfasiState extends State<AyarlarSayfasi> {
                     size: 20,
                   ),
                 ),
-
-                // ✅ İSTEDİĞİN 100 PX BOŞLUK
                 const SizedBox(height: 100),
               ],
             ),
@@ -216,7 +209,7 @@ class _AyarlarSayfasiState extends State<AyarlarSayfasi> {
         altBaslik: "$baslik vaktinde bildirim al",
         kontroller: Switch(
           activeThumbColor: widget.anaRenk,
-          activeTrackColor: widget.anaRenk.withValues(alpha: 0.3),
+          activeTrackColor: widget.anaRenk.withAlpha(80),
           value: vakitBildirimleri[vakit]!,
           onChanged: (v) {
             setState(() => vakitBildirimleri[vakit] = v);
@@ -251,16 +244,16 @@ class _AyarlarSayfasiState extends State<AyarlarSayfasi> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03), // ✅ Glassmorphism dokunuşu
+        color: Colors.white.withAlpha(10),
         borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: Colors.white.withAlpha(15)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: widget.anaRenk.withValues(alpha: 0.1),
+              color: widget.anaRenk.withAlpha(25),
               borderRadius: BorderRadius.circular(15),
             ),
             child: Icon(icon, color: widget.anaRenk, size: 20),

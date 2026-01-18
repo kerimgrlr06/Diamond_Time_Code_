@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DiniGunlerSayfasi extends StatefulWidget {
   final VoidCallback? onGeri;
   final Color anaRenk;
-
   const DiniGunlerSayfasi({
     super.key,
     this.onGeri,
@@ -16,271 +18,62 @@ class DiniGunlerSayfasi extends StatefulWidget {
 }
 
 class _DiniGunlerSayfasiState extends State<DiniGunlerSayfasi> {
-  late int seciliYil;
+  List<Map<String, dynamic>> _tumGunler = [];
+  bool _yukleniyor = true;
+  int _seciliYil = DateTime.now().year;
 
   @override
   void initState() {
     super.initState();
-    int currentYear = DateTime.now().year;
-    seciliYil = tumYillar.containsKey(currentYear) ? currentYear : 2025;
+    _baslat();
   }
 
-  // ✅ 2025 ve 2026 TAM DOĞRU TARİHLER (Diyanet Takvimi)
-  final Map<int, List<Map<String, dynamic>>> tumYillar = {
-    2025: [
-      {
-        "ad": "Üç Ayların Başlangıcı",
-        "t": DateTime(2025, 1, 1),
-        "desc": "Manevi bahar mevsimi Recep ayı ile başlıyor.",
-      },
-      {
-        "ad": "Regaip Kandili",
-        "t": DateTime(2025, 1, 2),
-        "desc": "Üç ayların müjdeleyicisi ilk kandil gecesi.",
-      },
-      {
-        "ad": "Miraç Kandili",
-        "t": DateTime(2025, 1, 26),
-        "desc": "Efendimizin ilahi huzura yükseldiği gece.",
-      },
-      {
-        "ad": "Berat Kandili",
-        "t": DateTime(2025, 2, 13),
-        "desc": "Af ve mağfiret gecesi.",
-      },
-      {
-        "ad": "Ramazan Başlangıcı",
-        "t": DateTime(2025, 3, 1),
-        "desc": "On bir ayın sultanına merhaba.",
-      },
-      {
-        "ad": "Kadir Gecesi",
-        "t": DateTime(2025, 3, 26),
-        "desc": "Bin aydan hayırlı gece.",
-      },
-      {
-        "ad": "Ramazan Bayramı Arefesi",
-        "t": DateTime(2025, 3, 29),
-        "desc": "Orucun son günü.",
-      },
-      {
-        "ad": "Ramazan Bayramı (1. Gün)",
-        "t": DateTime(2025, 3, 30),
-        "desc": "Şevval ayı başı.",
-      },
-      {
-        "ad": "Ramazan Bayramı (2. Gün)",
-        "t": DateTime(2025, 3, 31),
-        "desc": "Bayramın ikinci günü.",
-      },
-      {
-        "ad": "Ramazan Bayramı (3. Gün)",
-        "t": DateTime(2025, 4, 1),
-        "desc": "Bayramın son günü.",
-      },
-      {
-        "ad": "Kurban Bayramı Arefesi",
-        "t": DateTime(2025, 6, 5),
-        "desc": "Vakfe günü.",
-      },
-      {
-        "ad": "Kurban Bayramı (1. Gün)",
-        "t": DateTime(2025, 6, 6),
-        "desc": "Kurban ibadeti başlangıcı.",
-      },
-      {
-        "ad": "Kurban Bayramı (2. Gün)",
-        "t": DateTime(2025, 6, 7),
-        "desc": "Bayramın ikinci günü.",
-      },
-      {
-        "ad": "Kurban Bayramı (3. Gün)",
-        "t": DateTime(2025, 6, 8),
-        "desc": "Bayramın üçüncü günü.",
-      },
-      {
-        "ad": "Kurban Bayramı (4. Gün)",
-        "t": DateTime(2025, 6, 9),
-        "desc": "Bayramın son günü.",
-      },
-      {
-        "ad": "Hicri Yılbaşı",
-        "t": DateTime(2025, 6, 26),
-        "desc": "Yeni Hicri yıl başlangıcı.",
-      },
-      {
-        "ad": "Aşure Günü",
-        "t": DateTime(2025, 7, 5),
-        "desc": "Paylaşma simgesi.",
-      },
-      {
-        "ad": "Mevlid Kandili",
-        "t": DateTime(2025, 9, 3),
-        "desc": "Efendimizin kutlu doğumu.",
-      },
-      {
-        "ad": "Üç Ayların Başlangıcı (2.)",
-        "t": DateTime(2025, 12, 21),
-        "desc": "Yeni manevi sezon başlangıcı.",
-      },
-      {
-        "ad": "Regaip Kandili (2.)",
-        "t": DateTime(2025, 12, 25),
-        "desc": "Yılın son mübarek gecesi.",
-      },
-    ],
-    2026: [
-      {
-        "ad": "Miraç Kandili",
-        "t": DateTime(2026, 1, 15),
-        "desc": "Göklere yükseliş gecesi.",
-      },
-      {
-        "ad": "Berat Kandili",
-        "t": DateTime(2026, 2, 2),
-        "desc": "Günahların döküldüğü gece.",
-      },
-      {
-        "ad": "Ramazan Başlangıcı",
-        "t": DateTime(2026, 2, 19),
-        "desc": "Oruç ayı başlar.",
-      },
-      {
-        "ad": "Kadir Gecesi",
-        "t": DateTime(2026, 3, 16),
-        "desc": "Kur'an'ın indirildiği gece.",
-      },
-      {
-        "ad": "Arefe (Ramazan)",
-        "t": DateTime(2026, 3, 19),
-        "desc": "Bayram hazırlığı.",
-      },
-      {
-        "ad": "Ramazan Bayramı (1. Gün)",
-        "t": DateTime(2026, 3, 20),
-        "desc": "Şeker Bayramı başlangıcı.",
-      },
-      {
-        "ad": "Arefe (Kurban)",
-        "t": DateTime(2026, 5, 26),
-        "desc": "Arafat günü.",
-      },
-      {
-        "ad": "Kurban Bayramı (1. Gün)",
-        "t": DateTime(2026, 5, 27),
-        "desc": "Kurban kesimi başlar.",
-      },
-      {
-        "ad": "Hicri Yılbaşı (1 Muharrem)",
-        "t": DateTime(2026, 6, 16),
-        "desc": "1448 Hicri yıl başlar.",
-      },
-      {
-        "ad": "Aşure Günü",
-        "t": DateTime(2026, 6, 25),
-        "desc": "Paylaşma ve bereket günü.",
-      },
-      {
-        "ad": "Mevlid Kandili",
-        "t": DateTime(2026, 8, 24),
-        "desc": "Alemlere rahmetin doğumu.",
-      },
-      {
-        "ad": "Üç Ayların Başlangıcı",
-        "t": DateTime(2026, 12, 10),
-        "desc": "Manevi sezon başlar.",
-      },
-      {
-        "ad": "Regaip Kandili",
-        "t": DateTime(2026, 12, 10),
-        "desc": "Rahmet kapıları aralanır.",
-      },
-    ],
-  };
+  Future<void> _baslat() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? cached = prefs.getString('dini_gunler_cache');
+    if (cached != null) {
+      setState(() => _tumGunler = _jsonToList(json.decode(cached)));
+    }
 
-  void _gunDetayiniGoster(Map<String, dynamic> gun) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(30),
-        decoration: BoxDecoration(
-          color: const Color(0xFF0A0E1A).withValues(alpha: 0.97),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-          border: Border.all(color: widget.anaRenk.withValues(alpha: 0.2)),
+    try {
+      final res = await http.get(
+        Uri.parse(
+          'https://raw.githubusercontent.com/kerimgrlr06/Diamond_Time_Code_/refs/heads/main/dini_gunler.json',
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 50,
-              height: 5,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            const SizedBox(height: 25),
-            Text(
-              gun["ad"],
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: widget.anaRenk,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              DateFormat("d MMMM yyyy, EEEE", "tr_TR").format(gun["t"]),
-              style: const TextStyle(color: Colors.white60, fontSize: 15),
-            ),
-            const SizedBox(height: 25),
-            Text(
-              gun["desc"],
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                height: 1.6,
-              ),
-            ),
-            const SizedBox(height: 35),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.anaRenk,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  "KAPAT",
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+      );
+      if (res.statusCode == 200) {
+        final data = json.decode(utf8.decode(res.bodyBytes));
+        await prefs.setString('dini_gunler_cache', json.encode(data));
+        setState(() => _tumGunler = _jsonToList(data));
+      }
+    } catch (_) {}
+    setState(() => _yukleniyor = false);
+  }
+
+  List<Map<String, dynamic>> _jsonToList(List<dynamic> data) {
+    return data
+        .map(
+          (e) => {
+            "ad": e["ad"],
+            "t": DateTime.parse(e["t"]),
+            "desc": e["desc"],
+          },
+        )
+        .toList()
+      ..sort((a, b) => (a["t"] as DateTime).compareTo(b["t"] as DateTime));
   }
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> gunler = tumYillar[seciliYil] ?? [];
     final DateTime today = DateTime(
       DateTime.now().year,
       DateTime.now().month,
       DateTime.now().day,
     );
+    // ✅ Sadece seçili yıla ait günleri filtrele
+    final filtered = _tumGunler
+        .where((g) => (g["t"] as DateTime).year == _seciliYil)
+        .toList();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -290,218 +83,118 @@ class _DiniGunlerSayfasiState extends State<DiniGunlerSayfasi> {
         centerTitle: true,
         title: const Text(
           "DİNİ GÜNLER",
-          style: TextStyle(
-            letterSpacing: 3,
-            fontWeight: FontWeight.w100,
-            fontSize: 16,
-            color: Colors.white,
-          ),
+          style: TextStyle(letterSpacing: 3, fontSize: 16, color: Colors.white),
         ),
         leading: widget.onGeri != null
             ? IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_ios_new,
-                  size: 20,
-                  color: Colors.white,
-                ),
+                icon: const Icon(Icons.arrow_back_ios_new, size: 20),
                 onPressed: widget.onGeri,
               )
             : null,
       ),
-      body: Stack(
+      body: Column(
         children: [
-          // Hafif glow efekti
-          Positioned(
-            top: 80,
-            right: -120,
-            child: Container(
-              width: 400,
-              height: 400,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: widget.anaRenk.withValues(alpha: 0.08),
-                    blurRadius: 180,
-                    spreadRadius: 40,
-                  ),
-                ],
-              ),
-            ),
+          // ✅ Yıl butonları (Sadece ihtiyacımız olan yılları gösterir)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [2026, 2027].map((y) => _yilButonu(y)).toList(),
           ),
+          Expanded(
+            child: _yukleniyor
+                ? Center(
+                    child: CircularProgressIndicator(color: widget.anaRenk),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 120),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, i) {
+                      final gun = filtered[i];
+                      final DateTime dt = gun["t"];
+                      final bool bugun = dt.isAtSameMomentAs(today);
+                      final bool gecti = dt.isBefore(today);
+                      final int fark = dt.difference(today).inDays.abs();
 
-          Column(
-            children: [
-              // Yıl seçici
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [2025, 2026].map((yil) {
-                    bool secili = seciliYil == yil;
-                    return GestureDetector(
-                      onTap: () => setState(() => seciliYil = yil),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        margin: const EdgeInsets.symmetric(horizontal: 12),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 40,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: secili
-                              ? widget.anaRenk.withValues(alpha: 0.2)
-                              : Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(30),
-                          border: Border.all(
-                            color: secili
-                                ? widget.anaRenk
-                                : Colors.white.withValues(alpha: 0.1),
+                      return Opacity(
+                        opacity: gecti ? 0.5 : 1.0,
+                        child: Card(
+                          color: bugun
+                              ? widget.anaRenk.withAlpha(30)
+                              : Colors.white.withAlpha(10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(
+                              color: bugun ? widget.anaRenk : Colors.white10,
+                            ),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                            leading: Icon(
+                              bugun ? Icons.auto_awesome : Icons.event,
+                              color: bugun ? widget.anaRenk : Colors.white38,
+                            ),
+                            title: Text(
+                              gun["ad"],
+                              style: TextStyle(
+                                color: bugun ? widget.anaRenk : Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              DateFormat("d MMMM yyyy", "tr_TR").format(dt),
+                              style: const TextStyle(
+                                color: Colors.white38,
+                                fontSize: 12,
+                              ),
+                            ),
+                            trailing: Text(
+                              bugun
+                                  ? "BUGÜN"
+                                  : (gecti
+                                        ? "$fark gün önceydi"
+                                        : "$fark gün kaldı"),
+                              style: TextStyle(
+                                color: bugun
+                                    ? widget.anaRenk
+                                    : (gecti
+                                          ? Colors.white24
+                                          : widget.anaRenk.withAlpha(150)),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
-                        child: Text(
-                          "$yil",
-                          style: TextStyle(
-                            color: secili ? Colors.white : Colors.white60,
-                            fontSize: 17,
-                            fontWeight: secili
-                                ? FontWeight.bold
-                                : FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-
-              // Liste
-              Expanded(
-                child: ListView.builder(
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
+                      );
+                    },
                   ),
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 140),
-                  itemCount: gunler.length,
-                  itemBuilder: (context, index) {
-                    final gun = gunler[index];
-                    final DateTime gunTarihi = DateTime(
-                      gun["t"].year,
-                      gun["t"].month,
-                      gun["t"].day,
-                    );
-                    final bool bugunMu = gunTarihi.isAtSameMomentAs(today);
-                    final bool gectiMi = gunTarihi.isBefore(today);
-                    final int kalanGun = gunTarihi
-                        .difference(today)
-                        .inDays
-                        .abs();
-
-                    return Opacity(
-                      opacity: gectiMi ? 0.4 : 1.0,
-                      child: Card(
-                        margin: const EdgeInsets.only(bottom: 14),
-                        color: bugunMu
-                            ? widget.anaRenk.withValues(alpha: 0.15)
-                            : Colors.white.withValues(alpha: 0.04),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                          side: BorderSide(
-                            color: bugunMu
-                                ? widget.anaRenk
-                                : Colors.white.withValues(alpha: 0.1),
-                            width: bugunMu ? 2 : 1,
-                          ),
-                        ),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(28),
-                          onTap: () => _gunDetayiniGoster(gun),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 22,
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  bugunMu ? Icons.auto_awesome : Icons.event,
-                                  color: bugunMu
-                                      ? widget.anaRenk
-                                      : Colors.white60,
-                                  size: 30,
-                                ),
-                                const SizedBox(width: 20),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        gun["ad"],
-                                        style: TextStyle(
-                                          color: bugunMu
-                                              ? widget.anaRenk
-                                              : Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        DateFormat(
-                                          "d MMMM yyyy",
-                                          "tr_TR",
-                                        ).format(gun["t"]),
-                                        style: const TextStyle(
-                                          color: Colors.white54,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (bugunMu)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: widget.anaRenk,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const Text(
-                                      "BUGÜN",
-                                      style: TextStyle(
-                                        color: Colors.black,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  )
-                                else if (!gectiMi)
-                                  Text(
-                                    "$kalanGun gün",
-                                    style: TextStyle(
-                                      color: widget.anaRenk.withValues(
-                                        alpha: 0.7,
-                                      ),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _yilButonu(int y) {
+    bool s = _seciliYil == y;
+    return GestureDetector(
+      onTap: () => setState(() => _seciliYil = y),
+      child: Container(
+        margin: const EdgeInsets.all(8),
+        padding: const EdgeInsets.symmetric(horizontal: 35, vertical: 12),
+        decoration: BoxDecoration(
+          color: s ? widget.anaRenk.withAlpha(40) : Colors.white.withAlpha(10),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: s ? widget.anaRenk : Colors.transparent),
+        ),
+        child: Text(
+          "$y",
+          style: TextStyle(
+            color: s ? Colors.white : Colors.white38,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }

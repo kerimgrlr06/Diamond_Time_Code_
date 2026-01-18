@@ -4,8 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:ui';
 
 class ZikirmatikSayfasi extends StatefulWidget {
-  // ✅ HomeShell'den gelen dinamik rengi alıyoruz
-  final Color anaRenk;
+  final Color anaRenk; // HomeShell'den gelen dinamik renk
   const ZikirmatikSayfasi({super.key, this.anaRenk = Colors.blueAccent});
 
   @override
@@ -41,7 +40,6 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
     });
   }
 
-  // ✅ GARANTİ TİTREŞİM VE TEBRİK MANTIĞI
   void _artir() {
     _animationController.forward().then(
       (value) => _animationController.reverse(),
@@ -54,7 +52,7 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
 
     if (_titresimAcik) {
       if (_count % _target == 0) {
-        // 🎯 Hedefte çok güçlü geri bildirim
+        // Hedefte güçlü geri bildirim
         HapticFeedback.vibrate();
         Future.delayed(
           const Duration(milliseconds: 100),
@@ -62,13 +60,11 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
         );
         _tebrikDialogGoster();
       } else {
-        // ⚙️ Her tıkta "Tık" hissi veren stabil metod
         HapticFeedback.mediumImpact();
       }
     }
   }
 
-  // 🏆 HEDEF KUTLAMA EKRANI (Hata Giderildi)
   void _tebrikDialogGoster() {
     showDialog(
       context: context,
@@ -76,11 +72,10 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
       builder: (_) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1E293B).withValues(alpha: 0.9),
-          // ✅ HATA DÜZELTİLDİ: border yerine shape side kullanıldı
+          backgroundColor: const Color(0xFF1E293B).withAlpha(230),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(30),
-            side: BorderSide(color: widget.anaRenk.withValues(alpha: 0.3)),
+            side: BorderSide(color: widget.anaRenk.withAlpha(76)),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -187,8 +182,7 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
     if (_count > 0 && _count % _target == 0) progress = 1.0;
 
     return Scaffold(
-      backgroundColor:
-          Colors.transparent, // ✅ HomeShell'in gradientini kullanır
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -212,7 +206,6 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
       body: Stack(
         alignment: Alignment.center,
         children: [
-          // Arkaplan Neon Dokunuşu (Hata Giderildi)
           Positioned(
             top: 100,
             child: Container(
@@ -220,10 +213,9 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                // ✅ HATA DÜZELTİLDİ: blurRadius boxShadow içine taşındı
                 boxShadow: [
                   BoxShadow(
-                    color: widget.anaRenk.withValues(alpha: 0.1),
+                    color: widget.anaRenk.withAlpha(25),
                     blurRadius: 100,
                     spreadRadius: 20,
                   ),
@@ -235,18 +227,15 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Hedef Göstergesi
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
+                  color: Colors.white.withAlpha(13),
                   borderRadius: BorderRadius.circular(15),
-                  border: Border.all(
-                    color: widget.anaRenk.withValues(alpha: 0.2),
-                  ),
+                  border: Border.all(color: widget.anaRenk.withAlpha(51)),
                 ),
                 child: Text(
                   "HEDEF: $_target",
@@ -260,7 +249,6 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
               ),
               const SizedBox(height: 50),
 
-              // ✅ ANA ZİKİR BUTONU
               GestureDetector(
                 onTap: _artir,
                 child: ScaleTransition(
@@ -268,20 +256,18 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      // Dış Neon Halka
                       SizedBox(
                         width: 300,
                         height: 300,
                         child: CircularProgressIndicator(
                           value: progress,
                           strokeWidth: 4,
-                          backgroundColor: Colors.white.withValues(alpha: 0.05),
+                          backgroundColor: Colors.white.withAlpha(13),
                           valueColor: AlwaysStoppedAnimation<Color>(
                             widget.anaRenk,
                           ),
                         ),
                       ),
-                      // İç Buton
                       Container(
                         width: 250,
                         height: 250,
@@ -294,12 +280,12 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: widget.anaRenk.withValues(alpha: 0.15),
+                              color: widget.anaRenk.withAlpha(38),
                               blurRadius: 40,
                               spreadRadius: 5,
                             ),
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.4),
+                              color: Colors.black.withAlpha(102),
                               offset: const Offset(10, 10),
                               blurRadius: 20,
                             ),
@@ -314,12 +300,13 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
                                 fontSize: 90,
                                 fontWeight: FontWeight.w100,
                                 color: Colors.white,
+                                fontFeatures: [FontFeature.tabularFigures()],
                               ),
                             ),
                             Text(
                               "ZİKİR",
                               style: TextStyle(
-                                color: widget.anaRenk.withValues(alpha: 0.5),
+                                color: widget.anaRenk.withAlpha(127),
                                 letterSpacing: 8,
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -334,7 +321,6 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
               ),
               const SizedBox(height: 60),
 
-              // Alt Kontroller
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -351,6 +337,7 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
                   ),
                 ],
               ),
+              const SizedBox(height: 100),
             ],
           ),
         ],
@@ -366,13 +353,11 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: isActive
-              ? widget.anaRenk.withValues(alpha: 0.1)
-              : Colors.white.withValues(alpha: 0.03),
+              ? widget.anaRenk.withAlpha(25)
+              : Colors.white.withAlpha(8),
           shape: BoxShape.circle,
           border: Border.all(
-            color: isActive
-                ? widget.anaRenk.withValues(alpha: 0.4)
-                : Colors.white10,
+            color: isActive ? widget.anaRenk.withAlpha(102) : Colors.white10,
           ),
         ),
         child: Icon(
@@ -425,7 +410,7 @@ class _ZikirmatikSayfasiState extends State<ZikirmatikSayfasi>
                         decoration: BoxDecoration(
                           color: _target == v
                               ? widget.anaRenk
-                              : Colors.white.withValues(alpha: 0.05),
+                              : Colors.white.withAlpha(13),
                           borderRadius: BorderRadius.circular(15),
                         ),
                         child: Text(

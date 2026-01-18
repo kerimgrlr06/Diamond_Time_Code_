@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
-import 'dart:ui';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SozlerSayfasi extends StatefulWidget {
   final VoidCallback? onGeri;
@@ -17,31 +19,71 @@ class SozlerSayfasi extends StatefulWidget {
 }
 
 class _SozlerSayfasiState extends State<SozlerSayfasi> {
-  final List<String> _sozlerListesi = [
-    "Sizin en hayırlınız, Kur'an'ı öğrenen ve öğretendir. (Buhârî)",
-    "Ameller niyetlere göredir. (Buhârî)",
-    "Dua ibadetin özüdür. (Tirmizî)",
-    "İman, yetmiş küsur şubedir; en üstünü 'Lâ ilâhe illallah' demektir. (Müslim)",
-    "Temizlik imanın yarısıdır. (Müslim)",
-    "İslam, güzel ahlaktır. (Kenzü’l-Ummal)",
-    "Namaz dinin direğidir. (Beyhakî)",
-    "Dua müminin silahıdır. (Hâkim)",
-    "Cennetin anahtarı namazdır. (Tirmizî)",
-    "İlim öğrenmek her Müslüman üzerine farzdır. (İbn Mâce)",
-    // ... (tüm sözler aynı kalıyor, kısaltma için burada kesiyorum)
-    "Kalpler ancak Allah'ı anmakla huzur bulur. (Kur'an)",
-    "Rızık Allah'tandır.",
-    "Gayret bizden tevfik Allah'tandır.",
-    "Güzel söz sadakadır. (Buhârî)",
-    "Her vaktin bir namazı vardır.",
-  ];
-
-  late String gununSozu;
+  List<String> _sozlerListesi = [];
+  String _gununSozu = "Hikmetli bir söz yükleniyor...";
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    gununSozu = _sozlerListesi[DateTime.now().day % _sozlerListesi.length];
+    _verileriYukle();
+  }
+
+  Future<void> _verileriYukle() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. Önce Local Cache'den veriyi oku (Hız için)
+    final String? cachedData = prefs.getString('sozler_cache');
+    if (cachedData != null) {
+      if (mounted) {
+        setState(() {
+          _sozlerListesi = List<String>.from(json.decode(cachedData));
+          _gununSozuBelirle();
+        });
+      }
+    }
+
+    // 2. Güncel listeyi GitHub'dan çek
+    try {
+      final response = await http
+          .get(
+            Uri.parse(
+              'https://raw.githubusercontent.com/kerimgrlr06/Diamond_Time_Code_/refs/heads/main/diamond_time/sozler.json',
+            ),
+          )
+          .timeout(const Duration(seconds: 10)); // Bağlantı zaman aşımı eklendi
+
+      if (response.statusCode == 200) {
+        // Türkçe karakter desteği için utf8.decode kullanımı önemli
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        final List<String> yeniListe = List<String>.from(data);
+
+        await prefs.setString('sozler_cache', json.encode(yeniListe));
+
+        if (mounted) {
+          setState(() {
+            _sozlerListesi = yeniListe;
+            _gununSozuBelirle();
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint("Veri çekme hatası: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _gununSozuBelirle() {
+    if (_sozlerListesi.isNotEmpty) {
+      // Listenin uzunluğu değişse bile hata almamak için mod işlemi
+      int index = DateTime.now().day % _sozlerListesi.length;
+      setState(() {
+        _gununSozu = _sozlerListesi[index];
+      });
+    }
   }
 
   @override
@@ -56,7 +98,7 @@ class _SozlerSayfasiState extends State<SozlerSayfasi> {
           "HİKMETLİ SÖZLER",
           style: TextStyle(
             letterSpacing: 3,
-            fontWeight: FontWeight.w100,
+            fontWeight: FontWeight.w200, // Biraz daha zarif bir görünüm
             fontSize: 16,
             color: Colors.white,
           ),
@@ -67,131 +109,119 @@ class _SozlerSayfasiState extends State<SozlerSayfasi> {
             size: 20,
             color: Colors.white,
           ),
-          onPressed: widget.onGeri ?? () => Navigator.pop(context),
+          onPressed: widget.onGeri ?? () => Navigator.maybePop(context),
         ),
       ),
-      body: Stack(
-        children: [
-          // Hafif neon glow efekti (performans dostu)
-          Positioned(
-            top: 150,
-            left: -150,
-            child: Container(
-              width: 400,
-              height: 400,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: widget.anaRenk.withValues(alpha: 0.08),
-                    blurRadius: 200,
-                    spreadRadius: 50,
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Akıcı ListView
-          ListView(
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
-            children: [
-              _gununSozuKarti(),
-              const SizedBox(height: 30),
-              Text(
-                "SÖZLER KÜTÜPHANESİ",
-                style: TextStyle(
+      body: _isLoading && _sozlerListesi.isEmpty
+          ? Center(child: CircularProgressIndicator(color: widget.anaRenk))
+          : Stack(
+              children: [
+                _arkaPlanIsigi(),
+                RefreshIndicator(
+                  // Aşağı çekerek yenileme özelliği eklendi
+                  onRefresh: _verileriYukle,
                   color: widget.anaRenk,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11,
-                  letterSpacing: 2,
+                  backgroundColor: Colors.grey[900],
+                  child: ListView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
+                    children: [
+                      _gununSozuBolumu(),
+                      const SizedBox(height: 35),
+                      _listeBasligi("SÖZLER KÜTÜPHANESİ"),
+                      const SizedBox(height: 15),
+                      ..._sozlerListesi.map((soz) => _sozKarti(soz)).toList(),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              ..._sozlerListesi
-                  .map((soz) => _sozKarti(soz, soz == gununSozu))
-                  .toList(),
-            ],
-          ),
-        ],
+              ],
+            ),
+    );
+  }
+
+  Widget _arkaPlanIsigi() {
+    return Positioned(
+      top: 100,
+      left: -150,
+      child: Container(
+        width: 400,
+        height: 400,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: widget.anaRenk.withOpacity(0.1),
+              blurRadius: 200,
+              spreadRadius: 50,
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _gununSozuKarti() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 800),
-      curve: Curves.easeOutCubic,
-      padding: const EdgeInsets.all(32),
+  Widget _gununSozuBolumu() {
+    return Container(
+      padding: const EdgeInsets.all(30),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(40),
+        borderRadius: BorderRadius.circular(35),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            widget.anaRenk.withValues(alpha: 0.25),
-            widget.anaRenk.withValues(alpha: 0.08),
+            widget.anaRenk.withOpacity(0.2),
+            widget.anaRenk.withOpacity(0.05),
           ],
         ),
-        border: Border.all(
-          color: widget.anaRenk.withValues(alpha: 0.3),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: widget.anaRenk.withValues(alpha: 0.15),
-            blurRadius: 40,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        border: Border.all(color: widget.anaRenk.withOpacity(0.3)),
       ),
       child: Column(
         children: [
-          Icon(Icons.auto_awesome, color: widget.anaRenk, size: 50),
-          const SizedBox(height: 20),
-          const Text(
+          Icon(Icons.auto_awesome, color: widget.anaRenk, size: 45),
+          const SizedBox(height: 15),
+          Text(
             "GÜNÜN İLHAMI",
             style: TextStyle(
-              color: Colors.white60,
-              fontWeight: FontWeight.bold,
+              color: widget.anaRenk.withOpacity(0.7),
               letterSpacing: 3,
               fontSize: 10,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 25),
           Text(
-            gununSozu,
+            _gununSozu,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
-              fontWeight: FontWeight.w400,
-              height: 1.7,
               fontStyle: FontStyle.italic,
+              height: 1.6,
             ),
           ),
-          const SizedBox(height: 35),
+          const SizedBox(height: 30),
           ElevatedButton.icon(
-            onPressed: () => Share.shareXFiles(
-              [],
-              text: "$gununSozu\n\nDiamond Time - Huzur Vakti ✨",
+            onPressed: () => Share.share("$_gununSozu\n\nDiamond Time ✨"),
+            icon: const Icon(
+              Icons.share_rounded,
+              size: 18,
+              color: Colors.white,
             ),
-            icon: Icon(Icons.share_rounded, color: widget.anaRenk, size: 20),
             label: const Text(
               "HİKMETİ PAYLAŞ",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
-              foregroundColor: Colors.white,
+              backgroundColor: widget.anaRenk.withOpacity(0.3),
               elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
-                side: BorderSide(color: widget.anaRenk.withValues(alpha: 0.4)),
+                borderRadius: BorderRadius.circular(25),
+                side: BorderSide(color: widget.anaRenk.withOpacity(0.5)),
               ),
             ),
           ),
@@ -200,52 +230,55 @@ class _SozlerSayfasiState extends State<SozlerSayfasi> {
     );
   }
 
-  Widget _sozKarti(String soz, bool isGununSozu) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: isGununSozu
-          ? widget.anaRenk.withValues(alpha: 0.12)
-          : Colors.white.withValues(alpha: 0.03),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(28),
-        side: BorderSide(
-          color: isGununSozu
-              ? widget.anaRenk.withValues(alpha: 0.4)
-              : Colors.white.withValues(alpha: 0.08),
-          width: 1,
+  Widget _listeBasligi(String metin) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 10),
+      child: Text(
+        metin,
+        style: TextStyle(
+          color: widget.anaRenk,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+          letterSpacing: 2,
         ),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(28),
-        onTap: () => Share.shareXFiles([], text: "$soz\n\nDiamond Time"),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Row(
-            children: [
-              Icon(
-                isGununSozu ? Icons.auto_awesome : Icons.format_quote,
-                color: isGununSozu ? widget.anaRenk : Colors.white38,
-                size: 28,
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Text(
-                  soz,
-                  style: TextStyle(
-                    color: isGununSozu
-                        ? Colors.white
-                        : Colors.white.withOpacity(0.8),
-                    fontSize: 15,
-                    height: 1.6,
-                    fontWeight: isGununSozu ? FontWeight.w600 : FontWeight.w400,
-                  ),
-                ),
-              ),
-              Icon(Icons.share_outlined, color: Colors.white24, size: 18),
-            ],
+    );
+  }
+
+  Widget _sozKarti(String soz) {
+    bool isGununSozu = soz == _gununSozu;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isGununSozu
+            ? widget.anaRenk.withOpacity(0.15)
+            : Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isGununSozu
+              ? widget.anaRenk.withOpacity(0.5)
+              : Colors.white.withOpacity(0.1),
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 10,
+        ),
+        leading: Icon(
+          isGununSozu ? Icons.auto_awesome : Icons.format_quote_rounded,
+          color: isGununSozu ? widget.anaRenk : Colors.white24,
+          size: 24,
+        ),
+        title: Text(
+          soz,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.9),
+            fontSize: 14,
+            height: 1.5,
           ),
         ),
+        onTap: () => Share.share("$soz\n\nDiamond Time"),
       ),
     );
   }

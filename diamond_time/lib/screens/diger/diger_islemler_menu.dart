@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
-import 'dart:ui'; // ✅ İstediğin gibi burada tutuyoruz ve efekt için kullanıyoruz
+import 'dart:ui';
 
-// Diğer sayfalar
+// Sayfalar
 import '../drawer/camiler_sayfasi.dart';
 import '../drawer/kaza_namazi_sayfasi.dart';
 import '../drawer/dini_gunler_sayfasi.dart';
 import '../drawer/sozler_sayfasi.dart';
-// ✅ Dosya ismini ve sınıfını yeni ismine göre güncelledim
 import '../drawer/manevi_paylasim_sayfasi.dart';
 import '../drawer/ayarlar_sayfasi.dart';
 
 class DigerIslemlerMenu extends StatelessWidget {
   final Function(Widget) onSayfaSec;
-  final Color anaRenk;
+  final Color anaRenk; // ✅ HomeShell'den gelen dinamik renk
 
   const DigerIslemlerMenu({
     super.key,
@@ -31,7 +30,7 @@ class DigerIslemlerMenu extends StatelessWidget {
       {
         "icon": Icons.history_edu_rounded,
         "title": "Kaza Takip",
-        "desc": "Eksik Namazların",
+        "desc": "Eksik Namaz , Oruç Takibi ve Günlük Namaz Çizelgesi",
       },
       {
         "icon": Icons.nights_stay_rounded,
@@ -45,8 +44,7 @@ class DigerIslemlerMenu extends StatelessWidget {
       },
       {
         "icon": Icons.image_rounded,
-        "title":
-            "Manevi Paylaşım", // ✅ Görsel adı "Manevi Paylaşım" olarak mühürlendi
+        "title": "Manevi Paylaşım",
         "desc": "İslami Postlar",
       },
       {
@@ -56,23 +54,25 @@ class DigerIslemlerMenu extends StatelessWidget {
       },
     ];
 
+    // ✅ Geri dönüldüğünde ana rengin korunması sağlandı
     Widget sayfaGetir(String title) {
       void geri() => onSayfaSec(
         DigerIslemlerMenu(onSayfaSec: onSayfaSec, anaRenk: anaRenk),
       );
+
       switch (title) {
         case "Camiler":
-          return CamilerSayfasi(onGeri: geri);
+          return CamilerSayfasi(onGeri: geri, anaRenk: anaRenk);
         case "Kaza Takip":
-          return KazaNamaziSayfasi(onGeri: geri, anaRenk: anaRenk);
+          return KazaTakipSayfasi(onGeri: geri, anaRenk: anaRenk);
         case "Dini Günler":
           return DiniGunlerSayfasi(onGeri: geri, anaRenk: anaRenk);
         case "Günün Sözü":
           return SozlerSayfasi(onGeri: geri, anaRenk: anaRenk);
-        case "Manevi Paylaşım": // ✅ Case ismini de yeni sayfa adına göre düzelttim
+        case "Manevi Paylaşım":
           return ManeviPaylasimSayfasi(onGeri: geri, anaRenk: anaRenk);
         case "Ayarlar":
-          return AyarlarSayfasi(onGeri: geri);
+          return AyarlarSayfasi(onGeri: geri, anaRenk: anaRenk);
         default:
           return const SizedBox();
       }
@@ -113,15 +113,13 @@ class DigerIslemlerMenu extends StatelessWidget {
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.03),
+                  color: Colors.white.withAlpha(8), // withValues -> withAlpha
                   borderRadius: BorderRadius.circular(25),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.05),
-                  ),
+                  border: Border.all(color: Colors.white.withAlpha(13)),
                 ),
                 child: InkWell(
                   onTap: () => onSayfaSec(sayfaGetir(item['title'])),
-                  splashColor: anaRenk.withValues(alpha: 0.1),
+                  splashColor: anaRenk.withAlpha(25),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
@@ -130,7 +128,7 @@ class DigerIslemlerMenu extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: anaRenk.withValues(alpha: 0.08),
+                            color: anaRenk.withAlpha(20),
                             borderRadius: BorderRadius.circular(15),
                           ),
                           child: Icon(item['icon'], color: anaRenk, size: 28),
@@ -141,14 +139,14 @@ class DigerIslemlerMenu extends StatelessWidget {
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
-                            fontSize: 14, // ✅ Sığması için hafif küçültüldü
+                            fontSize: 14,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           item['desc'],
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.4),
+                            color: Colors.white.withAlpha(102),
                             fontSize: 10,
                           ),
                         ),

@@ -4,22 +4,22 @@ import 'package:flutter/services.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:adhan/adhan.dart';
-import '../../services/konum_servisi.dart'; // ✅ Mevcut servis entegrasyonu
+import '../../services/konum_servisi.dart';
 
 class PusulaSayfasi extends StatefulWidget {
-  final Color anaRenk; // ✅ Vakte göre değişen dinamik renk
+  final Color anaRenk; // ✅ HomeShell'den gelen dinamik renk
   const PusulaSayfasi({super.key, this.anaRenk = Colors.blueAccent});
 
   @override
   State<PusulaSayfasi> createState() => _PusulaSayfasiState();
 }
 
-class _PusulaSayfasiState extends State<PusulaSayfasi>
-    with SingleTickerProviderStateMixin {
-  static Coordinates? _cachedC;
-  static double? _cachedQibla;
+class _PusulaSayfasiState extends State<PusulaSayfasi> {
+  Coordinates? _coords;
+  double? _qiblaDirection;
   double? _heading;
   String _durum = "Konum ve sensör bekleniyor...";
+  bool _isVibrating = false;
 
   @override
   void initState() {
@@ -28,10 +28,10 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
   }
 
   Future<void> _baslat() async {
-    // ✅ PERFORMANS: KonumServisi'ndeki hazır veriyi kullanıyoruz
+    // Performans: Önce servisteki hazır konumu kontrol et
     if (KonumServisi.coords != null) {
-      _cachedC = KonumServisi.coords;
-      _cachedQibla = Qibla(_cachedC!).direction;
+      _coords = KonumServisi.coords;
+      _qiblaDirection = Qibla(_coords!).direction;
       _dinlemeyeBasla();
       return;
     }
@@ -40,8 +40,8 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
       Position p = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.low,
       );
-      _cachedC = Coordinates(p.latitude, p.longitude);
-      _cachedQibla = Qibla(_cachedC!).direction;
+      _coords = Coordinates(p.latitude, p.longitude);
+      _qiblaDirection = Qibla(_coords!).direction;
       _dinlemeyeBasla();
     } catch (e) {
       if (mounted) setState(() => _durum = "Konum alınamadı. GPS açık mı?");
@@ -51,7 +51,13 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
   void _dinlemeyeBasla() {
     FlutterCompass.events?.listen((event) {
       if (!mounted) return;
-      setState(() => _heading = event.heading);
+
+      // Performans: Sadece 1 dereceden fazla değişim olduğunda ekranı yenile
+      if (_heading == null || (event.heading! - _heading!).abs() > 1) {
+        setState(() {
+          _heading = event.heading;
+        });
+      }
     });
   }
 
@@ -59,15 +65,20 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
   Widget build(BuildContext context) {
     // Kabe hassasiyeti (5 derece tolerans)
     bool kabeBulundu =
-        (_heading != null && _cachedQibla != null) &&
-        ((_heading! - _cachedQibla!).abs() < 5);
+        (_heading != null && _qiblaDirection != null) &&
+        ((_heading! - _qiblaDirection!).abs() < 5);
 
-    if (kabeBulundu) {
-      HapticFeedback.selectionClick(); // ✅ Bulunduğunda pırlanta gibi titret
+    if (kabeBulundu && !_isVibrating) {
+      _isVibrating = true;
+      HapticFeedback.lightImpact();
+      Future.delayed(
+        const Duration(milliseconds: 1500),
+        () => _isVibrating = false,
+      );
     }
 
     return Scaffold(
-      backgroundColor: Colors.transparent, // ✅ Shell gradientini kullanır
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -82,17 +93,13 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
           ),
         ),
       ),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        child: _heading == null || _cachedQibla == null
+      body: SizedBox.expand(
+        child: _heading == null || _qiblaDirection == null
             ? _yuklemeEkrani()
             : Stack(
                 alignment: Alignment.center,
                 children: [
-                  // 1. Arka Plan Glow Efekti (Diamond Dokunuş)
                   _glowHalkasi(kabeBulundu),
-
                   Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -112,17 +119,17 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
   Widget _glowHalkasi(bool aktif) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 800),
-      width: 350,
-      height: 350,
+      width: 300,
+      height: 300,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
             color: aktif
-                ? Colors.greenAccent.withValues(alpha: 0.2)
-                : widget.anaRenk.withValues(alpha: 0.1),
-            blurRadius: 120,
-            spreadRadius: 20,
+                ? Colors.greenAccent.withAlpha(40)
+                : widget.anaRenk.withAlpha(20),
+            blurRadius: 100,
+            spreadRadius: 10,
           ),
         ],
       ),
@@ -133,7 +140,7 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 35, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: Colors.white.withAlpha(13),
         borderRadius: BorderRadius.circular(30),
         border: Border.all(color: aktif ? Colors.greenAccent : Colors.white10),
       ),
@@ -153,19 +160,6 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
     return Stack(
       alignment: Alignment.center,
       children: [
-        // Dış Neon Halka
-        Container(
-          width: 320,
-          height: 320,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.03),
-              width: 1,
-            ),
-          ),
-        ),
-
         // Dönen Pusula Diski
         Transform.rotate(
           angle: (_heading! * math.pi / 180) * -1,
@@ -177,22 +171,21 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
                 height: 280,
                 child: CustomPaint(painter: PusulaCizici(widget.anaRenk)),
               ),
-              Text(
+              const Text(
                 "N",
                 style: TextStyle(
-                  color: Colors.redAccent.withValues(alpha: 0.8),
+                  color: Colors.redAccent,
                   fontWeight: FontWeight.bold,
                   fontSize: 22,
-                  letterSpacing: 1,
                 ),
               ),
             ],
           ),
         ),
 
-        // Kabe Göstergesi (Statik değil, Kıbleye göre yön bulur)
+        // Kabe Göstergesi
         Transform.rotate(
-          angle: ((_heading! - _cachedQibla!) * math.pi / 180) * -1,
+          angle: ((_heading! - _qiblaDirection!) * math.pi / 180) * -1,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -210,13 +203,6 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
                     ],
                   ),
                   borderRadius: BorderRadius.circular(2),
-                  boxShadow: [
-                    if (aktif)
-                      BoxShadow(
-                        color: Colors.greenAccent.withValues(alpha: 0.5),
-                        blurRadius: 10,
-                      ),
-                  ],
                 ),
               ),
               const SizedBox(height: 10),
@@ -225,35 +211,21 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
                 color: aktif ? Colors.greenAccent : Colors.orangeAccent,
                 size: 40,
               ),
-              const SizedBox(height: 200), // Okun merkezden kaçıklığını ayarlar
+              const SizedBox(height: 200),
             ],
           ),
         ),
 
-        // Merkez Diamond Core
+        // Merkez Nokta
         Container(
-          width: 24,
-          height: 24,
+          width: 12,
+          height: 12,
           decoration: BoxDecoration(
-            color: const Color(0xFF0A0E1A),
+            color: Colors.white,
             shape: BoxShape.circle,
-            border: Border.all(color: widget.anaRenk, width: 2),
             boxShadow: [
-              BoxShadow(
-                color: widget.anaRenk.withValues(alpha: 0.5),
-                blurRadius: 15,
-              ),
+              BoxShadow(color: widget.anaRenk.withAlpha(150), blurRadius: 10),
             ],
-          ),
-          child: Center(
-            child: Container(
-              width: 6,
-              height: 6,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-              ),
-            ),
           ),
         ),
       ],
@@ -265,16 +237,16 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
       padding: const EdgeInsets.all(20),
       margin: const EdgeInsets.symmetric(horizontal: 40),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: Colors.white.withAlpha(8),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: Colors.white.withAlpha(13)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _bilgiKutusu("PUSULA", "${_heading?.toInt() ?? 0}°"),
+          _bilgiKutusu("CİHAZ AÇISI", "${_heading?.toInt() ?? 0}°"),
           Container(width: 1, height: 30, color: Colors.white10),
-          _bilgiKutusu("KIBLE", "${_cachedQibla?.toInt() ?? 0}°"),
+          _bilgiKutusu("KIBLE AÇISI", "${_qiblaDirection?.toInt() ?? 0}°"),
         ],
       ),
     );
@@ -288,7 +260,6 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
           style: const TextStyle(
             color: Colors.white38,
             fontSize: 9,
-            letterSpacing: 2,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -299,7 +270,6 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
             color: Colors.white,
             fontSize: 20,
             fontWeight: FontWeight.w200,
-            letterSpacing: 1,
           ),
         ),
       ],
@@ -315,11 +285,7 @@ class _PusulaSayfasiState extends State<PusulaSayfasi>
           const SizedBox(height: 25),
           Text(
             _durum,
-            style: const TextStyle(
-              color: Colors.white38,
-              fontSize: 11,
-              letterSpacing: 1,
-            ),
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
         ],
       ),
@@ -334,7 +300,7 @@ class PusulaCizici extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.1)
+      ..color = Colors.white.withAlpha(25)
       ..strokeWidth = 1.2;
     for (var i = 0; i < 360; i += 10) {
       final double angle = i * math.pi / 180;
